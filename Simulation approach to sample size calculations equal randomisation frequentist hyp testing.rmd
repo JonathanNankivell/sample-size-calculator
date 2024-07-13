@@ -145,11 +145,11 @@ alpha <- 0.05
 
 ```{r}
 
-png("priors.png", units = "in", width = 5, height = 4, res = 300)
+png("priors.png", units = "in", width = 2, height = 2, res = 300)
 
 x1 <- seq(0, 1, length=1000)
 y1 <- dbeta(x1, prior.i, prior.j)
-plot(x1, y1, type="l", col="red", main="Plot of Priors", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
+plot(x1, y1, type="l", col="red", main="Plot of Priors", ylab="Probability density", xlab="Actual Proportion")
 
 x2 <- seq(0, 1, length=1000)
 y2 <- dbeta(x1, prior.k, prior.l)

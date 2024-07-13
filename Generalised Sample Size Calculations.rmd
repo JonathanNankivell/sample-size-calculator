@@ -129,7 +129,7 @@ simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_p
 
 ## Introduction
 
-Most clinical trials compare a well known treatment against an less known experimental treatment. Sadly, clinical trial design often ignores this important fact.
+Most clinical trials compare a well known treatment against a less known experimental treatment. Sadly, clinical trial design often ignores this important fact.
 
 Take, for example, sample size calculations. Neither the sample size calculations that I see in textbooks or those that I see when performing ethics review incorporate the knowledge of the treatments that we have before the trial.
 
@@ -175,6 +175,7 @@ Our prior for the experimental treatment can thus be represented as follows:
 
 ```{r}
 
+# plot beta distribution
 x2 <- seq(0, 1, length=1000)
 y2 <- dbeta(x1, prior.k, prior.l)
 plot(x2, y2, type="l", col="blue", main="Plot of Prior of the Experimental Treatment", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
@@ -194,6 +195,7 @@ Lets continue with the well known vs experimental clinical trial example. Our pr
 
 ```{r}
 
+# plot beta distributions
 x1 <- seq(0, 1, length=1000)
 y1 <- dbeta(x1, prior.i, prior.j)
 plot(x1, y1, type="l", col="red", main="Plot of Priors", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
@@ -215,9 +217,14 @@ Clearly, statistical power depends on the sample size. So we need to run these s
 
 ```{r}
 
+# simulate the clinical trials
 y <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA, alpha)
+
+# plot the expected power for each sample size
 x <- 1:numb_of_patients
 plot(x,y, ylim=c(0,1), cex=0.5, ylab="Expected power",xlab="Sample size",main="Simulations of Optimal Sample Size")
+
+# find the sample size that give the power_threshold set earlier
 abline(h=power_threshold)
 optimal_sample_size <- sum(y < power_threshold); optimal_sample_size
 abline(v=optimal_sample_size)
