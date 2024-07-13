@@ -1,0 +1,246 @@
+# The Standard RCT Design Does Not Always Have the Highest Power
+
+## Define Allocation Rules
+
+```{r}
+
+balanced <- function( i, j, k, l, chooser_params ) {
+
+    n <- i + j + k + l
+
+    if (n%%2) {
+        action <- sample(c(1,2), size=1)
+    }
+    else {
+        if (i + j < k + l) {
+            action <- 1
+        } else {
+            action <- 2
+        }
+    }
+
+    return(action)
+
+}
+
+DTL <- function(i,j,k,l,chooser_params) {
+    numb_of_immigrants <- chooser_params
+    
+    done = FALSE
+    while(1-done) {
+        urn <- c( 5, 2 + numb_of_immigrants - j, 2 + numb_of_immigrants - l )
+        #print(urn)
+        ball <- sample(c(0,1,2), 1, prob = c(urn/sum(urn)))
+        if (ball==0) {
+            numb_of_immigrants <- numb_of_immigrants + 1
+        } else {
+            done <- TRUE
+        }
+    }
+    return(c(ball,numb_of_immigrants))
+}
+
+```
+
+
+## Define Trial Infrastructure
+
+```{r}
+
+one_run <- function(n, chooser, chooser_params) {
+
+    i <- 0
+    j <- 0
+    k <- 0
+    l <- 0
+
+    # set the true probability of success
+    p.c <- rbeta( 1, prior.i, prior.j )
+    p.n <- rbeta( 1, prior.k, prior.l )
+
+    #print(paste0("p.c: ", p.c, "p.n: ", p.n))
+
+    actions <- c()
+
+    for (m in 1:n) {
+
+        # use the chooser function to pick an action
+        # in this case, it should return 1 or 2
+        action <- chooser( i, j, k, l, chooser_params )
+        if (length(action)!=1) {
+            chooser_params <- action[2]
+            action <- action[1]
+        }
+
+        if (action == 1) {
+
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.c)
+
+            if (sample == 1) {
+                # success!
+                i <- i + 1
+            } else if (sample == 0) {
+                # failure
+                j <- j + 1
+            }
+        } else {
+            
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.n)
+
+            if (sample == 1) {
+                # success!
+                k <- k + 1
+            } else if (sample == 0) {
+                # failure
+                l <- l + 1
+            }
+        }
+        actions <- append(actions, action)
+    }
+    is_right_action <- ((p.c < p.n) + 1) == actions
+
+    xtab <- as.table(rbind(c(i, j), c(k, l)))
+    dimnames(xtab) <- list(
+        group = c("grp1", "grp2"),
+        success = c("yes", "no")
+    )
+    #print(xtab)
+    null_rejected <- tryCatch(
+        {
+            test <- prop.test(xtab)
+            test["p.value"] < 0.05
+        },
+        error=function(cond) {
+            FALSE
+        }
+    )
+    if (is.na(null_rejected)) {
+        null_rejected <- FALSE
+    }
+    # power is based on _correctly_ rejecting the null
+    # we must ignore rejections where the sign is wrong
+    p.c_hat <- i/(i+j)
+    p.n_hat <- k/(k+l)
+    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+    if (null_rejected & incorrect_direction) {
+        null_rejected <- FALSE
+    }
+    #print(null_rejected)
+
+    is_right_action <- append(is_right_action, null_rejected)
+
+    is_right_action["expected.c"] <- (prior.i + i)/(prior.i + i + prior.j + j)
+    is_right_action["expected.n"] <- (prior.k + k)/(prior.k + k + prior.l + l)
+
+    #print(paste("i:",i,"j:",j,"k:",k,"l:",l))
+
+    if (p.c > p.n) {
+        is_right_action["s_10"] <- i + j + 0.1*(i + j + k + l)< k + l
+        is_right_action["prop_best_treatment"] <- (i+j)/(i+j+k+l)
+    } else {
+        is_right_action["s_10"] <- i + j > k + l + 0.1*(i + j + k + l)
+        is_right_action["prop_best_treatment"] <- (k+l)/(i+j+k+l)
+    }
+
+    return(is_right_action)
+}
+
+
+
+simulator <- function(numb_of_sims, n, runner, chooser, chooser_params) {
+    # one_run, chooser
+
+    runs <- array(0, dim=n+5)
+    props <- c()
+
+    for (iter in 1:(numb_of_sims)) {
+        
+        is_right_action <- runner(n, chooser, chooser_params)
+        props <- append(props, is_right_action[length(is_right_action)])
+        is_right_action <- is_right_action[1:(length(is_right_action))]
+        runs <- runs + (is_right_action - runs)/(iter+1)
+    }
+
+    return(c(runs, props))
+}
+
+
+```
+
+
+## Set-up Trial Specifics
+
+```{r}
+
+prior.i <- 30
+prior.j <- 20
+prior.k <- 20
+prior.l <- 30
+
+numb_of_sims <- 10000
+
+```
+
+## RUN THE SIMUALATION
+### Large Trial
+```{r}
+numb_of_patients <- 500
+x <- 1:(numb_of_patients)
+
+prior.i <- 300
+prior.j <- 450
+prior.k <- 400
+prior.l <- 400
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props <- sim_data[(numb_of_patients+6):(length(sim_data))]
+balanced.results <- sim_data[1:(numb_of_patients+4)]
+balanced.ys <- balanced.results[1:(length(balanced.results)-4)]
+balanced.power <- balanced.results[length(balanced.results)-3]
+balanced.ENS <- mean(balanced.ys)
+balanced.S10 <- balanced.results[length(balanced.results)]
+sprintf("power is %f", balanced.power)
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, DTL, 2)
+DTL_4.props <- sim_data[(numb_of_patients+6):(length(sim_data))]
+DTL_4.results <- sim_data[1:(numb_of_patients+4)]
+DTL_4.ys <- DTL_4.results[1:(length(DTL_4.results)-4)]
+DTL_4.power <- DTL_4.results[length(DTL_4.results)-3]
+DTL_4.ENS <- mean(DTL_4.ys)
+DTL_4.S10 <- DTL_4.results[length(DTL_4.results)]
+sprintf("power is %f", DTL_4.power)
+
+```
+
+
+### Small Trial
+```{r}
+numb_of_patients <- 200
+x <- 1:(numb_of_patients)
+
+prior.i <- 1
+prior.j <- 1
+prior.k <- 200
+prior.l <- 300
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props <- sim_data[(numb_of_patients+6):(length(sim_data))]
+balanced.results <- sim_data[1:(numb_of_patients+4)]
+balanced.ys <- balanced.results[1:(length(balanced.results)-4)]
+balanced.power <- balanced.results[length(balanced.results)-3]
+balanced.ENS <- mean(balanced.ys)
+balanced.S10 <- balanced.results[length(balanced.results)]
+sprintf("power is %f", balanced.power)
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, DTL, 2)
+DTL_4.props <- sim_data[(numb_of_patients+6):(length(sim_data))]
+DTL_4.results <- sim_data[1:(numb_of_patients+4)]
+DTL_4.ys <- DTL_4.results[1:(length(DTL_4.results)-4)]
+DTL_4.power <- DTL_4.results[length(DTL_4.results)-3]
+DTL_4.ENS <- mean(DTL_4.ys)
+DTL_4.S10 <- DTL_4.results[length(DTL_4.results)]
+sprintf("power is %f", DTL_4.power)
+
+```

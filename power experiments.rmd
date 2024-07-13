@@ -1,0 +1,274 @@
+# Power Experiments
+
+## Define Allocation Rules
+
+```{r}
+
+balanced <- function( i, j, k, l, chooser_params ) {
+
+    n <- i + j + k + l
+
+    if (n%%2) {
+        action <- sample(c(1,2), size=1)
+    }
+    else {
+        if (i + j < k + l) {
+            action <- 1
+        } else {
+            action <- 2
+        }
+    }
+
+    return(action)
+
+}
+
+```
+
+
+## Define Trial Infrastructure
+
+```{r}
+
+one_run <- function(n, chooser, chooser_params) {
+
+    i <- 0
+    j <- 0
+    k <- 0
+    l <- 0
+
+    # set the true probability of success
+    p.c <- rbeta( 1, prior.i, prior.j )
+    p.n <- rbeta( 1, prior.k, prior.l )
+
+    #print(paste0("p.c: ", p.c, "p.n: ", p.n))
+
+    actions <- c()
+
+    for (m in 1:n) {
+
+        # use the chooser function to pick an action
+        # in this case, it should return 1 or 2
+        action <- chooser( i, j, k, l, chooser_params )
+        if (length(action)!=1) {
+            chooser_params <- action[2]
+            action <- action[1]
+        }
+
+        if (action == 1) {
+
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.c)
+
+            if (sample == 1) {
+                # success!
+                i <- i + 1
+            } else if (sample == 0) {
+                # failure
+                j <- j + 1
+            }
+        } else {
+            
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.n)
+
+            if (sample == 1) {
+                # success!
+                k <- k + 1
+            } else if (sample == 0) {
+                # failure
+                l <- l + 1
+            }
+        }
+        actions <- append(actions, action)
+    }
+    is_right_action <- ((p.c < p.n) + 1) == actions
+
+    xtab <- as.table(rbind(c(i, j), c(k, l)))
+    dimnames(xtab) <- list(
+        group = c("grp1", "grp2"),
+        success = c("yes", "no")
+    )
+    #print(xtab)
+    null_rejected <- tryCatch(
+        {
+            test <- prop.test(xtab)
+            test["p.value"] < 0.05
+        },
+        error=function(cond) {
+            FALSE
+        }
+    )
+    if (is.na(null_rejected)) {
+        null_rejected <- FALSE
+    }
+    # power is based on _correctly_ rejecting the null
+    # we must ignore rejections where the sign is wrong
+    p.c_hat <- i/(i+j)
+    p.n_hat <- k/(k+l)
+    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+    if (null_rejected & incorrect_direction) {
+        null_rejected <- FALSE
+    }
+    #print(null_rejected)
+
+    is_right_action <- append(is_right_action, null_rejected)
+
+    is_right_action["expected.c"] <- (prior.i + i)/(prior.i + i + prior.j + j)
+    is_right_action["expected.n"] <- (prior.k + k)/(prior.k + k + prior.l + l)
+
+    #print(paste("i:",i,"j:",j,"k:",k,"l:",l))
+
+    if (p.c > p.n) {
+        is_right_action["s_10"] <- i + j + 0.1*(i + j + k + l)< k + l
+        is_right_action["prop_best_treatment"] <- (i+j)/(i+j+k+l)
+    } else {
+        is_right_action["s_10"] <- i + j > k + l + 0.1*(i + j + k + l)
+        is_right_action["prop_best_treatment"] <- (k+l)/(i+j+k+l)
+    }
+
+    return(is_right_action)
+}
+
+
+
+simulator <- function(numb_of_sims, n, runner, chooser, chooser_params) {
+    # one_run, chooser
+
+    runs <- array(0, dim=n+5)
+    props <- c()
+
+    for (iter in 1:(numb_of_sims)) {
+        
+        is_right_action <- runner(n, chooser, chooser_params)
+        props <- append(props, is_right_action[length(is_right_action)])
+        is_right_action <- is_right_action[1:(length(is_right_action))]
+        runs <- runs + (is_right_action - runs)/(iter+1)
+    }
+
+    return(c(runs, props))
+}
+
+
+```
+
+
+## Set-up Trial Specifics
+
+```{r}
+
+params1 = c(1,1,1,1)
+params2 = c(10000,1,10000,1)
+params3 = c(1,100,1,100)
+params4 = c(4,3,3,4)
+params5 = c(400,300,500,300)
+params6 = c(600,500,1,1)
+params7 = c(500,600,1,1)
+params8 = c(1000,10,1100,10)
+params9 = c(10,1000,10,1100)
+params10 = c(10,1,1,10)
+
+
+
+find_power <- function(numb_of_sims, numb_of_patients, params) {
+    prior.i <- params[1]
+    prior.j <- params[2]
+    prior.k <- params[3]
+    prior.l <- params[4]
+
+    #print(paste(prior.i,prior.j,prior.k,prior.l))
+
+    sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+    balanced.results <- sim_data[1:(numb_of_patients+4)]
+    return(balanced.results[length(balanced.results)-3])
+}
+
+list <- list()
+for (params in list(params1,params2,params3,params4,params5,params6,params7,params8,params9)) {
+    row <- c()
+    for (i in 1:3) {
+        row <- append(powers, find_power(100, 10**i, params))
+    }
+    list <- rbind(list, row)
+}
+df <- data.frame(list, check.rows = FALSE, check.names = TRUE, stringsAsFactors = default.stringsAsFactors())
+
+numb_of_sims <- 1000
+
+s_1 <- find_power(numb_of_sims, 10, params1)
+s_2 <- find_power(numb_of_sims, 10, params2)
+s_3 <- find_power(numb_of_sims, 10, params3)
+s_4 <- find_power(numb_of_sims, 10, params4)
+s_5 <- find_power(numb_of_sims, 10, params5)
+s_6 <- find_power(numb_of_sims, 10, params6)
+s_7 <- find_power(numb_of_sims, 10, params7)
+s_8 <- find_power(numb_of_sims, 10, params8)
+s_9 <- find_power(numb_of_sims, 10, params9)
+s_ <- c(s_1,s_2,s_3,s_4,s_5,s_6,s_7,s_8,s_9)
+
+m_1 <- find_power(numb_of_sims, 100, params1)
+m_2 <- find_power(numb_of_sims, 100, params2)
+m_3 <- find_power(numb_of_sims, 100, params3)
+m_4 <- find_power(numb_of_sims, 100, params4)
+m_5 <- find_power(numb_of_sims, 100, params5)
+m_6 <- find_power(numb_of_sims, 100, params6)
+m_7 <- find_power(numb_of_sims, 100, params7)
+m_8 <- find_power(numb_of_sims, 100, params8)
+m_9 <- find_power(numb_of_sims, 100, params9)
+m_ <- c(m_1,m_2,m_3,m_4,m_5,m_6,m_7,m_8,m_9)
+
+l_1 <- find_power(numb_of_sims, 1000, params1)
+l_2 <- find_power(numb_of_sims, 1000, params2)
+l_3 <- find_power(numb_of_sims, 1000, params3)
+l_4 <- find_power(numb_of_sims, 1000, params4)
+l_5 <- find_power(numb_of_sims, 1000, params5)
+l_6 <- find_power(numb_of_sims, 1000, params6)
+l_7 <- find_power(numb_of_sims, 1000, params7)
+l_8 <- find_power(numb_of_sims, 1000, params8)
+l_9 <- find_power(numb_of_sims, 1000, params9)
+l_ <- c(l_1,l_2,l_3,l_4,l_5,l_6,l_7,l_8,l_9)
+
+df <- data.frame(s_,m_,l_)
+df
+
+find_power(100, 1000, params4)
+
+
+
+
+
+
+prior.i <- 30
+prior.j <- 20
+prior.k <- 20
+prior.l <- 30
+
+numb_of_sims <- 10000
+
+```
+
+## RUN THE SIMUALATION
+### Large Trial
+```{r}
+numb_of_patients <- 100
+x <- 1:(numb_of_patients)
+
+prior.i <- 1
+prior.j <- 1
+prior.k <- 1
+prior.l <- 1
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props <- sim_data[(numb_of_patients+6):(length(sim_data))]
+balanced.results <- sim_data[1:(numb_of_patients+4)]
+balanced.ys <- balanced.results[1:(length(balanced.results)-4)]
+balanced.power <- balanced.results[length(balanced.results)-3]
+balanced.ENS <- mean(balanced.ys)
+balanced.S10 <- balanced.results[length(balanced.results)]
+sprintf("power is %f", balanced.power)
+
+png("C:\\Users\\nanki\\Downloads\\my barplot.png")
+barplot(c(1,2,3))
+dev.off()
+
+```

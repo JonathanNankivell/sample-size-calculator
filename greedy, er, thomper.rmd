@@ -1,0 +1,367 @@
+# Clean
+
+
+## Define Allocation Rules
+
+```{r}
+
+thomper <- function( i, j, k, l, chooser_params ) {
+
+    sample.c <- rbeta(1, i + prior.i, j + prior.j)
+    sample.n <- rbeta(1, k + prior.k, l + prior.l)
+
+    if (sample.c > sample.n) {
+        return(1)
+    } else {
+       return(2)
+    }
+}
+
+balanced <- function( i, j, k, l, chooser_params ) {
+
+    n <- i + j + k + l
+
+    if (n%%2) {
+        action <- sample(c(1,2), size=1)
+    }
+    else {
+        if (i + j < k + l) {
+            action <- 1
+        } else {
+            action <- 2
+        }
+    }
+
+    return(action)
+
+}
+
+greedy <- function( i, j, k, l, chooser_params ) {
+
+    expected.c <- (prior.i)/(prior.i + prior.j)
+    expected.n <- (prior.k)/(prior.k + prior.l)
+
+    if (expected.c > expected.n) {
+        return(1)
+    } else {
+        return(2)
+    }
+}
+
+
+```
+
+
+## Define Trial Infrastructure
+
+```{r}
+
+one_run <- function(n, chooser, chooser_params) {
+
+    i <- 0
+    j <- 0
+    k <- 0
+    l <- 0
+
+    # set the true probability of success
+    p.c <- rbeta( 1, prior.i, prior.j )
+    p.n <- rbeta( 1, prior.k, prior.l )
+
+    #print(paste0("p.c: ", p.c, "p.n: ", p.n))
+
+    actions <- c()
+
+    for (m in 1:n) {
+
+        # use the chooser function to pick an action
+        # in this case, it should return 1 or 2
+        action <- chooser( i, j, k, l, chooser_params )
+        if (length(action)!=1) {
+            chooser_params <- action[2]
+            action <- action[1]
+        }
+
+        if (action == 1) {
+
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.c)
+
+            if (sample == 1) {
+                # success!
+                i <- i + 1
+            } else if (sample == 0) {
+                # failure
+                j <- j + 1
+            }
+        } else {
+            
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.n)
+
+            if (sample == 1) {
+                # success!
+                k <- k + 1
+            } else if (sample == 0) {
+                # failure
+                l <- l + 1
+            }
+        }
+        actions <- append(actions, action)
+    }
+    is_right_action <- ((p.c < p.n) + 1) == actions
+
+    xtab <- as.table(rbind(c(i, j), c(k, l)))
+    dimnames(xtab) <- list(
+        group = c("grp1", "grp2"),
+        success = c("yes", "no")
+    )
+    #print(xtab)
+    null_rejected <- tryCatch(
+        {
+            test <- prop.test(xtab)
+            test["p.value"] < 0.05
+        },
+        error=function(cond) {
+            FALSE
+        }
+    )
+    if (is.na(null_rejected)) {
+        null_rejected <- FALSE
+    }
+    # power is based on _correctly_ rejecting the null
+    # we must ignore rejections where the sign is wrong
+    p.c_hat <- i/(i+j)
+    p.n_hat <- k/(k+l)
+    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+    if (null_rejected & incorrect_direction) {
+        null_rejected <- FALSE
+    }
+    #print(null_rejected)
+
+    is_right_action <- append(is_right_action, null_rejected)
+
+    is_right_action["expected.c"] <- (prior.i + i)/(prior.i + i + prior.j + j)
+    is_right_action["expected.n"] <- (prior.k + k)/(prior.k + k + prior.l + l)
+
+    #print(paste("i:",i,"j:",j,"k:",k,"l:",l))
+
+    if (p.c > p.n) {
+        is_right_action["s_10"] <- i + j + 0.1*(i + j + k + l)< k + l
+        is_right_action["prop_best_treatment"] <- (i+j)/(i+j+k+l)
+    } else {
+        is_right_action["s_10"] <- i + j > k + l + 0.1*(i + j + k + l)
+        is_right_action["prop_best_treatment"] <- (k+l)/(i+j+k+l)
+    }
+
+    return(is_right_action)
+}
+
+
+
+simulator <- function(numb_of_sims, n, runner, chooser, chooser_params) {
+    # one_run, chooser
+
+    runs <- array(0, dim=n+5)
+    props <- c()
+
+    for (iter in 1:(numb_of_sims)) {
+        
+        is_right_action <- runner(n, chooser, chooser_params)
+        props <- append(props, is_right_action[length(is_right_action)])
+        is_right_action <- is_right_action[1:(length(is_right_action))]
+        runs <- runs + (is_right_action - runs)/(iter+1)
+    }
+
+    return(c(runs, props))
+}
+
+
+```
+
+
+## Set-up Trial Specifics
+
+```{r}
+numb_of_sims <- 10000
+
+colours <- c("#E64B35","#4DBBD5","#00A087","#3C5488","#F39B7F","#8491B4","#91D1C2","#DC0000","#7E6148","#B09C85")
+bandits <- c("Greedy","TS","TS/25","DTL(2)","TS Falling Min 10,000","TS/100","Rosey","TS Falling Min 1000","EBM n=1000")
+width <- 2
+
+```
+
+## RUN THE SIMUALATION
+### Sim 1
+
+```{r}
+prior.i <- 1
+prior.j <- 1
+prior.k <- 1
+prior.l <- 1
+
+numb_of_patients <- 100
+x <- 1:(numb_of_patients)
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, greedy, NA)
+greedy.props1 <- sim_data1[(numb_of_patients+6):(length(sim_data1))]
+greedy.results1 <- sim_data1[1:(numb_of_patients+4)]
+greedy.ys1 <- greedy.results1[1:(length(greedy.results1)-4)]
+greedy.power1 <- greedy.results1[length(greedy.results1)-3]
+greedy.ENS1 <- mean(greedy.ys1)
+greedy.S101 <- greedy.results1[length(greedy.results1)]
+sprintf("power is %f", greedy.power)
+
+sim_data1 <- simulator(numb_of_sims, numb_of_patients, one_run, thomper, NA)
+thomper.props1 <- sim_data1[(numb_of_patients+6):(length(sim_data1))]
+thomper.results1 <- sim_data1[1:(numb_of_patients+4)]
+thomper.ys1 <- thomper.results1[1:(length(thomper.results1)-4)]
+thomper.power1 <- thomper.results1[length(thomper.results1)-3]
+thomper.ENS1 <- mean(thomper.ys1)
+thomper.S101 <- thomper.results1[length(thomper.results1)]
+sprintf("power is %f", thomper.power1)
+
+sim_data1 <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props1 <- sim_data1[(numb_of_patients+6):(length(sim_data1))]
+balanced.results1 <- sim_data1[1:(numb_of_patients+4)]
+balanced.ys1 <- balanced.results1[1:(length(balanced.results1)-4)]
+balanced.power1 <- balanced.results1[length(balanced.results1)-3]
+balanced.ENS1 <- mean(balanced.ys1)
+balanced.S101 <- balanced.results1[length(balanced.results1)]
+sprintf("power is %f", balanced.power1)
+
+png("C:\\Users\\nanki\\Downloads\\greedy, ER, Thomper.png")
+par(mfrow = c(2, 2))
+plot(balanced.ys1 ~ x, type='l',xlim=c(0,numb_of_patients),ylim=c(0,1), main="Uniform Priors & 100 Patients", sub=paste(numb_of_patients, "Patients"), xlab="Patient Index", ylab="Probability of Best Treatment", col=colours[1], lwd=width)
+lines(thomper.ys1 ~ x, col=colours[2], lwd=width)
+lines(greedy.ys1 ~ x, col=colours[4], lwd=width)
+```
+
+### Sim 2
+
+```{r}
+prior.i <- 1
+prior.j <- 1
+prior.k <- 500
+prior.l <- 600
+
+numb_of_patients <- 100
+x <- 1:(numb_of_patients)
+
+sim_data2 <- simulator(numb_of_sims, numb_of_patients, one_run, greedy, NA)
+greedy.props2 <- sim_data2[(numb_of_patients+6):(length(sim_data2))]
+greedy.results2 <- sim_data[1:(numb_of_patients+4)]
+greedy.ys2 <- greedy.results[1:(length(greedy.results2)-4)]
+greedy.power2 <- greedy.results[length(greedy.results2)-3]
+greedy.ENS2 <- mean(greedy.ys2)
+greedy.S102 <- greedy.results[length(greedy.results2)]
+sprintf("power is %f", greedy.power2)
+
+sim_data <- simulator(numb_of_sims, numb_of_patients, one_run, thomper, NA)
+thomper.props2 <- sim_data2[(numb_of_patients+6):(length(sim_data2))]
+thomper.results2 <- sim_data2[1:(numb_of_patients+4)]
+thomper.ys2 <- thomper.results2[1:(length(thomper.results2)-4)]
+thomper.power2 <- thomper.results2[length(thomper.results2)-3]
+thomper.ENS2 <- mean(thomper.ys)
+thomper.S102 <- thomper.results2[length(thomper.results2)]
+sprintf("power is %f", thomper.power2)
+
+sim_data2 <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props2 <- sim_data2[(numb_of_patients+6):(length(sim_data2))]
+balanced.results2 <- sim_data2[1:(numb_of_patients+4)]
+balanced.ys2 <- balanced.results2[1:(length(balanced.results2)-4)]
+balanced.power2 <- balanced.results2[length(balanced.results2)-3]
+balanced.ENS2 <- mean(balanced.ys2)
+balanced.S102 <- balanced.results2[length(balanced.results2)]
+sprintf("power is %f", balanced.power2)
+
+plot(balanced.ys2 ~ x, type='l',xlim=c(0,numb_of_patients),ylim=c(0,1), main="Unequal Priors & 100 Patients", sub=paste(numb_of_patients, "Patients"), xlab="Patient Index", ylab="Probability of Best Treatment", col=colours[1], lwd=width)
+lines(thomper.ys2 ~ x, col=colours[2], lwd=width)
+lines(greedy.ys2 ~ x, col=colours[4], lwd=width)
+```
+
+### Sim 3
+
+```{r}
+prior.i <- 1
+prior.j <- 1
+prior.k <- 1
+prior.l <- 1
+
+numb_of_patients <- 1000
+x <- 1:(numb_of_patients)
+
+sim_data3 <- simulator(numb_of_sims, numb_of_patients, one_run, greedy, NA)
+greedy.props3 <- sim_data3[(numb_of_patients+6):(length(sim_data3))]
+greedy.results3 <- sim_data3[1:(numb_of_patients+4)]
+greedy.ys3 <- greedy.results3[1:(length(greedy.results3)-4)]
+greedy.power3 <- greedy.results3[length(greedy.results3)-3]
+greedy.ENS3 <- mean(greedy.ys3)
+greedy.S103 <- greedy.results3[length(greedy.results3)]
+sprintf("power is %f", greedy.power3)
+
+sim_data3 <- simulator(numb_of_sims, numb_of_patients, one_run, thomper, NA)
+thomper.props3 <- sim_data3[(numb_of_patients+6):(length(sim_data3))]
+thomper.results3 <- sim_data3[1:(numb_of_patients+4)]
+thomper.ys3 <- thomper.results3[1:(length(thomper.results3)-4)]
+thomper.power3 <- thomper.results3[length(thomper.results3)-3]
+thomper.ENS3 <- mean(thomper.ys3)
+thomper.S103 <- thomper.results3[length(thomper.results3)]
+sprintf("power is %f", thomper.power3)
+
+sim_data3 <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props3 <- sim_data3[(numb_of_patients+6):(length(sim_data3))]
+balanced.results3 <- sim_data3[1:(numb_of_patients+4)]
+balanced.ys3 <- balanced.results3[1:(length(balanced.results3)-4)]
+balanced.power3 <- balanced.results3[length(balanced.results3)-3]
+balanced.ENS3 <- mean(balanced.ys3)
+balanced.S103 <- balanced.results[length(balanced.results3)]
+sprintf("power is %f", balanced.power)
+
+plot(balanced.ys3 ~ x, type='l',xlim=c(0,numb_of_patients),ylim=c(0,1), main="Uniform Priors & 1000 Patients", sub=paste(numb_of_patients, "Patients"), xlab="Patient Index", ylab="Probability of Best Treatment", col=colours[1], lwd=width)
+lines(thomper.ys3 ~ x, col=colours[2], lwd=width)
+lines(greedy.ys3 ~ x, col=colours[4], lwd=width)
+```
+
+### Sim 4
+
+```{r}
+prior.i <- 1
+prior.j <- 1
+prior.k <- 500
+prior.l <- 600
+
+numb_of_patients <- 1000
+x <- 1:(numb_of_patients)
+
+sim_data4 <- simulator(numb_of_sims, numb_of_patients, one_run, greedy, NA)
+greedy.props4 <- sim_data4[(numb_of_patients+6):(length(sim_data4))]
+greedy.results4 <- sim_data4[1:(numb_of_patients+4)]
+greedy.ys4 <- greedy.results4[1:(length(greedy.results4)-4)]
+greedy.power4 <- greedy.results4[length(greedy.results4)-3]
+greedy.ENS4 <- mean(greedy.ys4)
+greedy.S104 <- greedy.results4[length(greedy.results4)]
+sprintf("power is %f", greedy.power4)
+
+sim_data4 <- simulator(numb_of_sims, numb_of_patients, one_run, thomper, NA)
+thomper.props4 <- sim_data4[(numb_of_patients+6):(length(sim_data4))]
+thomper.results4 <- sim_data4[1:(numb_of_patients+4)]
+thomper.ys4 <- thomper.results4[1:(length(thomper.results4)-4)]
+thomper.power4 <- thomper.results4[length(thomper.results4)-3]
+thomper.ENS4 <- mean(thomper.ys4)
+thomper.S104 <- thomper.results4[length(thomper.results4)]
+sprintf("power is %f", thomper.power4)
+
+sim_data4 <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA)
+balanced.props4 <- sim_data4[(numb_of_patients+6):(length(sim_data4))]
+balanced.results4 <- sim_data4[1:(numb_of_patients+4)]
+balanced.ys4 <- balanced.results4[1:(length(balanced.results4)-4)]
+balanced.power4 <- balanced.results4[length(balanced.results4)-3]
+balanced.ENS4 <- mean(balanced.ys4)
+balanced.S104 <- balanced.results4[length(balanced.results4)]
+sprintf("power is %f", balanced.power4)
+
+plot(balanced.ys4 ~ x, type='l',xlim=c(0,numb_of_patients),ylim=c(0,1), main="Unequal Priors & 1000 Patients", sub=paste(numb_of_patients, "Patients"), xlab="Patient Index", ylab="Probability of Best Treatment", col=colours[1], lwd=width)
+lines(thomper.ys4 ~ x, col=colours[2], lwd=width)
+lines(greedy.ys4 ~ x, col=colours[4], lwd=width)
+dev.off()
+```
