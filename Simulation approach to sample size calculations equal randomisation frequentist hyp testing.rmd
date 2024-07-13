@@ -128,7 +128,7 @@ simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_p
 ## Set up parameters
 
 ```{r}
-numb_of_sims <- 100
+numb_of_sims <- 10000
 numb_of_patients <- 300
 
 prior.i <- 100
@@ -144,20 +144,31 @@ alpha <- 0.05
 ## Plot of Bayesian Priors
 
 ```{r}
+
+png("priors.png", units = "in", width = 5, height = 4, res = 300)
+
 x1 <- seq(0, 1, length=1000)
 y1 <- dbeta(x1, prior.i, prior.j)
-plot(x1, y1, type="l", col="red", main="Plot of Bayesian Priors", ylab="Density", xlab="Proportion")
+plot(x1, y1, type="l", col="red", main="Plot of Priors", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
 
 x2 <- seq(0, 1, length=1000)
 y2 <- dbeta(x1, prior.k, prior.l)
 lines(x2, y2, col="blue")
+#plot(x2, y2, type="l", col="blue", main="Plot of Prior of the Experimental Treatment", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
+
+#legend(x="topright", legend=c(paste0("Beta(",prior.i,",",prior.j,")")), lty=1, col=c("red"))
+#legend(x="topright", legend=c(paste0("Beta(",prior.k,",",prior.l,")")), lty=1, col=c("blue"))
 legend(x="topright", legend=c(paste0("Beta(",prior.i,",",prior.j,")"), paste0("Beta(",prior.k,",",prior.l,")")), lty=1, col=c("red", "blue"))
+
+dev.off()
 
 ```
 
 ## Calculate Minimum Sufficient Sample Size
 
 ```{r}
+
+png("power_vs_sample_size.png", units = "in", width = 5, height = 4, res = 300)
 
 y <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA, alpha)
 x <- 1:numb_of_patients
@@ -166,5 +177,22 @@ abline(h=power_threshold)
 optimal_sample_size <- sum(y < power_threshold); optimal_sample_size
 abline(v=optimal_sample_size)
 
+dev.off()
+
 ```
 
+
+```{r}
+
+png("power_vs_sample_size.png", units = "in", width = 5, height = 4, res = 300)
+
+plot(x,y, ylim=c(0,1), cex=0.5, ylab="Expected power",xlab="Sample size",main="Simulations of Optimal Sample Size")
+abline(h=power_threshold)
+optimal_sample_size <- sum(y < power_threshold); optimal_sample_size
+abline(v=optimal_sample_size)
+
+
+
+dev.off()
+
+```

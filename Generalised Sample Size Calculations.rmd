@@ -1,0 +1,235 @@
+# Generalised Sample Size Calculations
+
+A Monte Carlo-based approach
+
+
+## Define functions
+
+```{r}
+
+balanced <- function( i, j, k, l, chooser_params ) {
+
+    n <- i + j + k + l
+
+    if (n%%2) {
+        action <- sample(c(1,2), size=1)
+    }
+    else {
+        if (i + j < k + l) {
+            action <- 1
+        } else {
+            action <- 2
+        }
+    }
+
+    return(action)
+}
+
+
+one_run <- function(n, chooser, chooser_params, alpha) {
+
+    i <- 0
+    j <- 0
+    k <- 0
+    l <- 0
+
+    # set the true probability of success
+    p.c <- rbeta( 1, prior.i, prior.j )
+    p.n <- rbeta( 1, prior.k, prior.l )
+
+    correctly_reject_nulls <- c()
+
+    for (m in 1:n) {
+
+        # use the chooser function to pick an action
+        # in this case, it should return 1 or 2
+        action <- chooser( i, j, k, l, chooser_params )
+        if (length(action)!=1) {
+            chooser_params <- action[2]
+            action <- action[1]
+        }
+
+        if (action == 1) {
+
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.c)
+
+            if (sample == 1) {
+                # success!
+                i <- i + 1
+            } else if (sample == 0) {
+                # failure
+                j <- j + 1
+            }
+        } else {
+            
+            # decide whether or not the treatment is a success
+            sample <- rbinom(1, 1, p.n)
+
+            if (sample == 1) {
+                # success!
+                k <- k + 1
+            } else if (sample == 0) {
+                # failure
+                l <- l + 1
+            }
+        }
+
+        xtab <- as.table(rbind(c(i, j), c(k, l)))
+        dimnames(xtab) <- list(
+            group = c("grp1", "grp2"),
+            success = c("yes", "no")
+        )
+
+
+        null_rejected <- tryCatch(
+            {
+                test <- prop.test(xtab)
+                test["p.value"] < alpha
+            },
+            error=function(cond) {
+                FALSE
+            }
+        )
+        if (is.na(null_rejected)) {
+            null_rejected <- FALSE
+        }
+        # power is based on _correctly_ rejecting the null
+        # we must ignore rejections where the sign is wrong
+        p.c_hat <- i/(i+j)
+        p.n_hat <- k/(k+l)
+        incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+        correctly_reject_null <- null_rejected
+        if (null_rejected & incorrect_direction) {
+            correctly_reject_null <- FALSE
+        }
+
+        correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
+    }
+
+    return(correctly_reject_nulls)
+}
+
+
+simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+
+    runs <- array(0, dim=numb_of_patients)
+    props <- c()
+
+    for (iter in 1:(numb_of_sims)) {
+        
+        correctly_reject_nulls <- runner(numb_of_patients, chooser, chooser_params, alpha)
+        runs <- runs + (correctly_reject_nulls - runs)/(iter+1)
+    }
+
+    return(c(runs, props))
+}
+
+```
+
+## Introduction
+
+Most clinical trials compare a well known treatment against an less known experimental treatment. Sadly, clinical trial design often ignores this important fact.
+
+Take, for example, sample size calculations. Neither the sample size calculations that I see in textbooks or those that I see when performing ethics review incorporate the knowledge of the treatments that we have before the trial.
+
+That is despite often extensive literature reviews establishing knowledge of the treatments. They consolidate all known knowledge about the treatments and then ignore it when calculating the sample size. Such ignorance is regrettable and, as we shall see, easily avoided.
+
+## Representing Knowledge
+
+Suppose we are comparing two treatment that have a binary effect: either they work or they don’t. The proportion of times that they will work is fixed but unknown.
+
+One of these treatments is well characterised. It has been used for decades and it is understood that it works in about 50% of cases. This can be modelled using a Beta distribution such as the one given below.
+
+```{r}
+
+# setup parameters
+numb_of_sims <- 10000
+numb_of_patients <- 300
+
+prior.i <- 100
+prior.j <- 100
+prior.k <- 3
+prior.l <- 1
+
+power_threshold <- 0.8
+alpha <- 0.05
+
+# plot beta distribution
+x1 <- seq(0, 1, length=1000)
+y1 <- dbeta(x1, prior.i, prior.j)
+plot(x1, y1, type="l", col="red", main="Plot of Prior of the Control Treatment", ylab="Probability density", xlab="Actual Proportion")
+legend(x="topright", legend=c(paste0("Beta(",prior.i,",",prior.j,")")), lty=1, col=c("red"))
+
+```
+
+This is a mathematical way of representing the belief that the true proportion is between 40% and 60% but that we are not sure where in that interval the true proportion lies.
+
+Naturally, we know a lot less about the experimental treatment. But what information we do have can still be represented in the same way as above. Given that we are considering running a trial using the experimental treatment, our belief probably satisfies these characteristics:
+
+- There is a decent chance that the experimental treatments is much better than the control treatment
+- There is a small chance that the experimental treatment is worse than the control treatment; and
+- Our uncertainty is greater for the experimental treatment than it is for the control treatment.
+
+Our prior for the experimental treatment can thus be represented as follows:
+
+```{r}
+
+x2 <- seq(0, 1, length=1000)
+y2 <- dbeta(x1, prior.k, prior.l)
+plot(x2, y2, type="l", col="blue", main="Plot of Prior of the Experimental Treatment", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
+legend(x="topright", legend=c(paste0("Beta(",prior.k,",",prior.l,")")), lty=1, col=c("blue"))
+
+```
+
+We can see that this probability distribution does indeed satisfy the above conditions.
+
+So much for representing knowledge. How can we use it?
+
+## Calculation Sample Sizes
+
+To calculate the sample size that should be used for any specific clinical trial, we can observe thousands of _en silico_ clinical trials stemming from our knowledge of the treatments and can analyse the data that that produced to find our retrospectively what the size of the sample should have been.
+
+Lets continue with the well known vs experimental clinical trial example. Our priors are represented using the below distributions:
+
+```{r}
+
+x1 <- seq(0, 1, length=1000)
+y1 <- dbeta(x1, prior.i, prior.j)
+plot(x1, y1, type="l", col="red", main="Plot of Priors", ylab="Probability density", xlab="Actual Proportion", width=5, hight=4)
+
+x2 <- seq(0, 1, length=1000)
+y2 <- dbeta(x1, prior.k, prior.l)
+lines(x2, y2, col="blue")
+legend(x="topright", legend=c(paste0("Beta(",prior.i,",",prior.j,")"), paste0("Beta(",prior.k,",",prior.l,")")), lty=1, col=c("red", "blue"))
+
+```
+
+To run a simulation of a single trial we will sample from both of these distributions to get the true proportion in that trial’s universe. We get, say, 51% and 65% for the control and experimental treatments respectively. We then run a equal allocation clinical trial using those values to calculate the summary statistics for the trial. Those statistics are used to calculate the p-value and that p-value is recorded. We also record whether the sampled values from each distribution represented the control treatment being better than the experimental treatment or vis versa.
+
+We simulate thousands of such simulations, resampling from the prior distributions each time.
+
+The p-values determine whether or not each trial is viewed as having concluded that the experimental treatment is better than the control. Since statistical power is “the probability that the test correctly rejects the null hypothesis when a specific alternative hypothesis is true”, we can estimate the power by calculating the proportion of simulated trials where the test correctly rejected the null hypothesis.
+
+Clearly, statistical power depends on the sample size. So we need to run these simulations and estimate the statistical power for each plausible sample size. The result of these simulations are plotted below:
+
+```{r}
+
+y <- simulator(numb_of_sims, numb_of_patients, one_run, balanced, NA, alpha)
+x <- 1:numb_of_patients
+plot(x,y, ylim=c(0,1), cex=0.5, ylab="Expected power",xlab="Sample size",main="Simulations of Optimal Sample Size")
+abline(h=power_threshold)
+optimal_sample_size <- sum(y < power_threshold); optimal_sample_size
+abline(v=optimal_sample_size)
+
+```
+
+Each point represents the expected power for a specific sample size. As the simulations give slightly-random results, the points do not increase monotonically. I have also plotted a horizonal line corresponding to 80% power. By inspecting the curve, we can see that a sample size of 255 gives 80% power.
+
+## Conclution
+
+Sample sizes are often generated without incorporating knowledge about the treatments. This makes partially redundent the large literature reviews they may have performed and reduces confidence in the soundness of their methods.
+
+By using a simulation-based approach, we can find the appropriate sample size for a clinical trial while incorporating the knowledge that we have about the control and experimental treatments.
+
+I recommend that we do so.

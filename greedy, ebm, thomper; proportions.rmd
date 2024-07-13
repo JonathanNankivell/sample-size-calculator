@@ -1,6 +1,5 @@
 # Clean
 
-
 ## Define Allocation Rules
 
 ```{r}

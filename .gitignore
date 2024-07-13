@@ -1,0 +1,23 @@
+clean.rmd
+frontier plotting.rmd
+greedy, EBM, Thomper.png
+greedy, ebm, thomper.rmd
+greedy, EBM, Thomper; frontier.png
+greedy, EBM, Thomper; proportions.png
+greedy, ebm, thomper; proportions.rmd
+greedy, ER, Thomper.png
+greedy, er, thomper.rmd
+greedy, ER, Thomper; ENS; priors=(1,1,1,1); n=100.png
+greedy, ER, Thomper; ENS; priors=(1,1,1,1); n=1000.png
+greedy, ER, Thomper; ENS; priors=(1,1,1,1); n=200.png
+greedy, ER, Thomper; ENS; priors=(1,1,500,600); n=100.png
+greedy, ER, Thomper; ENS; priors=(1,1,500,600); n=1000.png
+greedy, ER, Thomper; ENS; priors=(1,1,600,500); n=1000.png
+greedy, ER, Thomper; ENS; priors=(1,1,600,500); n=200.png
+just sample size calculatoins.rmd
+my barplot.png
+power experiments.rmd
+sim.r
+standard rct design does not alway have highest power.rmd
+standard rct design does not always have highest power.rmd
+trial sims.code-workspace
