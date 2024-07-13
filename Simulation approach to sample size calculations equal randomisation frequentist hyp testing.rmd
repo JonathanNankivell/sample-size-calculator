@@ -145,7 +145,7 @@ alpha <- 0.05
 
 ```{r}
 
-png("priors.png", units = "in", width = 2, height = 2, res = 300)
+png("priors.png", units = "in", width = 5, height = 4, res = 300)
 
 x1 <- seq(0, 1, length=1000)
 y1 <- dbeta(x1, prior.i, prior.j)
