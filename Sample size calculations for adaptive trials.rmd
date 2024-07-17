@@ -96,6 +96,67 @@ tw_foo <- function( i, j, k, l, chooser_params ) {
     return(action)
 }
 
+DTL <- function(i,j,k,l,chooser_params) {
+    numb_of_immigrants <- chooser_params
+    
+    done = FALSE
+    while(1-done) {
+        urn <- c( 5, 2 + numb_of_immigrants - j, 2 + numb_of_immigrants - l )
+        #print(urn)
+        ball <- sample(c(0,1,2), 1, prob = c(urn/sum(urn)))
+        if (ball==0) {
+            numb_of_immigrants <- numb_of_immigrants + 1
+        } else {
+            done <- TRUE
+        }
+    }
+    return(c(ball,numb_of_immigrants))
+}
+
+
+g <- function(alpha, x, y) {
+    if (x==1) {return(0)}
+    if (x==0) {return(1)}
+    else {
+        numer <- y * (y/x)**alpha
+        denom <- y * (y/x)**alpha + (1 - y) * ((1 - y)/(1 - x))**alpha
+        return(numer/denom)
+    }
+}
+
+
+DBCD <- function(i,j,k,l,chooser_params) {
+
+    alpha <- chooser_params
+
+    n <- i + j + k + l
+    if (n<4) {
+        if (n%%2 == 1) {
+            return(1)
+        } else {
+            return(2)
+        }
+    } else {
+
+        p_hat_m_1 <- (i+0.5)/(i+j+1)
+        p_hat_m_2 <- (k+0.5)/(k+l+1)
+
+        q_hat_m_1 <- 1 - p_hat_m_1
+        q_hat_m_2 <- 1 - p_hat_m_2
+
+        p_hat_m <- q_hat_m_2 / ( q_hat_m_2 + q_hat_m_1 )
+
+        prob <- g( alpha , (i+j)/n , p_hat_m )
+
+        #print(prob)
+
+        action <- sample(c(1,2),1,prob=c(prob,1-prob))
+        return(action)
+    }
+}
+
+
+
 
 ```
 
@@ -116,6 +177,7 @@ one_run <- function(n, chooser, chooser_params, alpha) {
     p.n <- rbeta( 1, prior.k, prior.l )
 
     correctly_reject_nulls <- c()
+    is_successes <- c()
 
     for (m in 1:n) {
 
@@ -182,24 +244,24 @@ one_run <- function(n, chooser, chooser_params, alpha) {
         }
 
         correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
+        is_successes <- append(is_successes, sample)
     }
 
-    return(correctly_reject_nulls)
+    return(rbind(correctly_reject_nulls,is_successes))
 }
 
 
 simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
 
-    runs <- array(0, dim=numb_of_patients)
-    props <- c()
+    runs <- array(0, dim=c(2,numb_of_patients))
 
     for (iter in 1:(numb_of_sims)) {
         
-        correctly_reject_nulls <- runner(numb_of_patients, chooser, chooser_params, alpha)
-        runs <- runs + (correctly_reject_nulls - runs)/(iter+1)
+        run_results <- runner(numb_of_patients, chooser, chooser_params, alpha)
+        runs <- runs + (run_results - runs)/(iter+1)
     }
 
-    return(c(runs, props))
+    return(runs)
 }
 
 ```
@@ -209,8 +271,8 @@ simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_p
 ```{r}
 
 # setup parameters
-numb_of_sims <- 50
-numb_of_patients <- 100000
+numb_of_sims <- 500
+numb_of_patients <- 2**9
 
 prior.i <- 100
 prior.j <- 100
@@ -237,8 +299,11 @@ legend(x="topright", legend=c(paste0("Beta(",prior.i,",",prior.j,")"), paste0("B
 
 ```{r}
 
+chooser = "DBCD"
+chooser_params = 2
+
 # simulate the clinical trials
-y <- simulator(numb_of_sims, numb_of_patients, one_run, tw_foo, 0.5, alpha)
+sim_output <- simulator(numb_of_sims, numb_of_patients, one_run, get(chooser), chooser_params, alpha)
 
 ```
 
@@ -246,11 +311,12 @@ y <- simulator(numb_of_sims, numb_of_patients, one_run, tw_foo, 0.5, alpha)
 
 # plot the expected power for each sample size
 
-png("sample size vs power for TW(0.5); B(100,100) & B(1,3).png", units = "in", width = 5, height = 4, res = 300)
+png("sample size vs power for DBCD(2); B(100,100) & B(1,3).png", units = "in", width = 5, height = 4, res = 300)
 
 x <- 1:numb_of_patients
+y <- sim_output[1,]
 
-plot(x,y, ylim=c(0,1), cex=0.25, ylab="Expected power",xlab="Sample size",main="Sample Size vs Power for TW(0.5)")
+plot(x,y, ylim=c(0,1), cex=0.25, ylab="Expected power",xlab="Sample size",main="Sample Size vs Power for DBCD(2)")
 
 # find the sample size that give the power_threshold set earlier
 abline(h=power_threshold)
@@ -262,4 +328,47 @@ dev.off()
 ```
 
 
+
+```{r}
+
+add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+  
+  sim_output <- simulator(numb_of_sims, numb_of_patients, runner, get(chooser), chooser_params, alpha)
+
+  orders_of_magitude <- floor(log(numb_of_patients,2))
+
+  for (i in 1:orders_of_magitude) {
+    sample_size <- 2**i
+    df <- data.frame(
+      "timestamp" = Sys.Date(),
+      "number of sims" = numb_of_sims,
+      "sample size" = sample_size,
+      "chooser" = chooser,
+      "chooser_params" = chooser_params,
+      "prior.i" = prior.i,
+      "prior.j" = prior.j,
+      "prior.k" = prior.k,
+      "prior.l" = prior.l,
+      "power" = sim_output[1,][sample_size],
+      "ENS" = mean(sim_output[2,1:sample_size])
+    )
+    write.table(df, "output.csv", append=TRUE, sep=",", col.names = FALSE, row.names = FALSE)
+  }
+}
+
+```
+
+
+```{r}
+
+choosers = rbind(c("balanced","NA"),c("thomper","NA"),c("DTL",0),c("DTL",2),c("DTL",6),c("DBCD",0),c("DBCD",2),c("DBCD",4),c("tw_foo",0.5))
+
+for (i in 1:dim(choosers)[1]) {
+  print(paste(choosers[i,][1], choosers[i,][2]))
+  add_to_csv(100, 2**9, one_run, choosers[i,][1], as.numeric(choosers[i,][2]), alpha)
+}
+
+
+
+```
 
