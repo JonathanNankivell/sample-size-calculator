@@ -127,34 +127,62 @@ g <- function(alpha, x, y) {
 
 DBCD <- function(i,j,k,l,chooser_params) {
 
-    alpha <- chooser_params
+  alpha <- chooser_params
 
-    n <- i + j + k + l
-    if (n<4) {
-        if (n%%2 == 1) {
-            return(1)
-        } else {
-            return(2)
-        }
+  n <- i + j + k + l
+  if (n<4) {
+    if (n%%2 == 1) {
+      return(1)
     } else {
-
-        p_hat_m_1 <- (i+0.5)/(i+j+1)
-        p_hat_m_2 <- (k+0.5)/(k+l+1)
-
-        q_hat_m_1 <- 1 - p_hat_m_1
-        q_hat_m_2 <- 1 - p_hat_m_2
-
-        p_hat_m <- q_hat_m_2 / ( q_hat_m_2 + q_hat_m_1 )
-
-        prob <- g( alpha , (i+j)/n , p_hat_m )
-
-        #print(prob)
-
-        action <- sample(c(1,2),1,prob=c(prob,1-prob))
-        return(action)
+      return(2)
     }
+  } else {
+
+    p_hat_m_1 <- (i+0.5)/(i+j+1)
+    p_hat_m_2 <- (k+0.5)/(k+l+1)
+
+    q_hat_m_1 <- 1 - p_hat_m_1
+    q_hat_m_2 <- 1 - p_hat_m_2
+
+    p_hat_m <- q_hat_m_2 / ( q_hat_m_2 + q_hat_m_1 )
+
+    prob <- g( alpha , (i+j)/n , p_hat_m )
+
+    #print(prob)
+
+    action <- sample(c(1,2),1,prob=c(prob,1-prob))
+    return(action)
+  }
 }
 
+
+ebm <- function( i, j, k, l, chooser_params ) {
+
+  trial_size <- chooser_params
+  patient <- i+j+k+l
+
+  if (patient < trial_size) {
+    if (patient%%2) {
+      return(sample(c(1,2), size=1))
+    }
+    else {
+      if (i + j < k + l) {
+        return(1)
+      } else {
+        return(2)
+      }
+    }
+  } else {
+    expected.c <- (prior.i + i)/(prior.i + i + prior.j + j)
+    expected.n <- (prior.k + k)/(prior.k + k + prior.l + l)
+
+    if (expected.c > expected.n) {
+        return(1)
+    } else {
+        return(2)
+    }
+  }
+}
 
 
 
@@ -167,101 +195,101 @@ DBCD <- function(i,j,k,l,chooser_params) {
 
 one_run <- function(n, chooser, chooser_params, alpha) {
 
-    i <- 0
-    j <- 0
-    k <- 0
-    l <- 0
+  i <- 0
+  j <- 0
+  k <- 0
+  l <- 0
 
-    # set the true probability of success
-    p.c <- rbeta( 1, prior.i, prior.j )
-    p.n <- rbeta( 1, prior.k, prior.l )
+  # set the true probability of success
+  p.c <- rbeta( 1, prior.i, prior.j )
+  p.n <- rbeta( 1, prior.k, prior.l )
 
-    correctly_reject_nulls <- c()
-    is_successes <- c()
+  correctly_reject_nulls <- c()
+  is_successes <- c()
 
-    for (m in 1:n) {
+  for (m in 1:n) {
 
-        # use the chooser function to pick an action
-        # in this case, it should return 1 or 2
-        action <- chooser( i, j, k, l, chooser_params )
-        if (length(action)!=1) {
-            chooser_params <- action[2]
-            action <- action[1]
-        }
-
-        if (action == 1) {
-
-            # decide whether or not the treatment is a success
-            sample <- rbinom(1, 1, p.c)
-
-            if (sample == 1) {
-                # success!
-                i <- i + 1
-            } else if (sample == 0) {
-                # failure
-                j <- j + 1
-            }
-        } else {
-            
-            # decide whether or not the treatment is a success
-            sample <- rbinom(1, 1, p.n)
-
-            if (sample == 1) {
-                # success!
-                k <- k + 1
-            } else if (sample == 0) {
-                # failure
-                l <- l + 1
-            }
-        }
-
-        xtab <- as.table(rbind(c(i, j), c(k, l)))
-        dimnames(xtab) <- list(
-            group = c("grp1", "grp2"),
-            success = c("yes", "no")
-        )
-
-        null_rejected <- tryCatch(
-            {
-                test <- prop.test(xtab)
-                test["p.value"] < alpha
-            },
-            error=function(cond) {
-                FALSE
-            }
-        )
-        if (is.na(null_rejected)) {
-            null_rejected <- FALSE
-        }
-        # power is based on _correctly_ rejecting the null
-        # we must ignore rejections where the sign is wrong
-        p.c_hat <- i/(i+j)
-        p.n_hat <- k/(k+l)
-        incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
-        correctly_reject_null <- null_rejected
-        if (null_rejected & incorrect_direction) {
-            correctly_reject_null <- FALSE
-        }
-
-        correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
-        is_successes <- append(is_successes, sample)
+    # use the chooser function to pick an action
+    # in this case, it should return 1 or 2
+    action <- chooser( i, j, k, l, chooser_params )
+    if (length(action)!=1) {
+        chooser_params <- action[2]
+        action <- action[1]
     }
 
-    return(rbind(correctly_reject_nulls,is_successes))
+    if (action == 1) {
+
+      # decide whether or not the treatment is a success
+      sample <- rbinom(1, 1, p.c)
+
+      if (sample == 1) {
+        # success!
+        i <- i + 1
+      } else if (sample == 0) {
+        # failure
+        j <- j + 1
+      }
+    } else {
+        
+      # decide whether or not the treatment is a success
+      sample <- rbinom(1, 1, p.n)
+
+      if (sample == 1) {
+        # success!
+        k <- k + 1
+      } else if (sample == 0) {
+        # failure
+        l <- l + 1
+      }
+    }
+
+    xtab <- as.table(rbind(c(i, j), c(k, l)))
+    dimnames(xtab) <- list(
+      group = c("grp1", "grp2"),
+      success = c("yes", "no")
+    )
+
+    null_rejected <- tryCatch(
+      {
+        test <- prop.test(xtab)
+        test["p.value"] < alpha
+      },
+      error=function(cond) {
+        FALSE
+      }
+    )
+    if (is.na(null_rejected)) {
+      null_rejected <- FALSE
+    }
+    # power is based on _correctly_ rejecting the null
+    # we must ignore rejections where the sign is wrong
+    p.c_hat <- i/(i+j)
+    p.n_hat <- k/(k+l)
+    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+    correctly_reject_null <- null_rejected
+    if (null_rejected & incorrect_direction) {
+      correctly_reject_null <- FALSE
+    }
+
+    correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
+    is_successes <- append(is_successes, sample)
+  }
+
+  return(rbind(correctly_reject_nulls,is_successes))
 }
 
 
 simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
 
-    runs <- array(0, dim=c(2,numb_of_patients))
+  runs <- array(0, dim=c(2,numb_of_patients))
 
-    for (iter in 1:(numb_of_sims)) {
-        
-        run_results <- runner(numb_of_patients, chooser, chooser_params, alpha)
-        runs <- runs + (run_results - runs)/(iter+1)
-    }
+  for (iter in 1:(numb_of_sims)) {
 
-    return(runs)
+    run_results <- runner(numb_of_patients, chooser, chooser_params, alpha)
+    runs <- runs + (run_results - runs)/(iter+1)
+  }
+
+  return(runs)
 }
 
 ```
@@ -365,7 +393,7 @@ choosers = rbind(c("balanced","NA"),c("thomper","NA"),c("DTL",0),c("DTL",2),c("D
 
 for (i in 1:dim(choosers)[1]) {
   print(paste(choosers[i,][1], choosers[i,][2]))
-  add_to_csv(100, 2**9, one_run, choosers[i,][1], as.numeric(choosers[i,][2]), alpha)
+  add_to_csv(100, 2**9, one_run, choosers[i,][1], choosers[i,][2], alpha)
 }
 
 
