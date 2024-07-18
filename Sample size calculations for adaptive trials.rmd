@@ -389,13 +389,46 @@ add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_
 
 ```{r}
 
-choosers = rbind(c("balanced","NA"),c("thomper","NA"),c("DTL",0),c("DTL",2),c("DTL",6),c("DBCD",0),c("DBCD",2),c("DBCD",4),c("tw_foo",0.5))
+priors <- rbind(
+  c(1,1),
+  c(100,100),
+  c(100,1),
+  c(1,100),
+  c(3,1),
+  c(420,300),
+  c(500,600),
+  c(1000,10),
+  c(1010,10),
+  c(10,1000),
+  c(10,1010)
+)
 
-for (i in 1:dim(choosers)[1]) {
-  print(paste(choosers[i,][1], choosers[i,][2]))
-  add_to_csv(100, 2**9, one_run, choosers[i,][1], choosers[i,][2], alpha)
+choosers <- rbind(
+  c("balanced","NA"),
+  c("thomper","NA"),
+  c("DTL",0),
+  c("DTL",2),
+  c("DTL",6),
+  c("DBCD",0),
+  c("DBCD",2),
+  c("DBCD",4),
+  c("tw_foo",0.5)
+)
+
+for (x in 1:dim(priors)[1]) {
+  for (y in 1:dim(priors)[1]) {
+    prior.i <- priors[x,1]
+    prior.j <- priors[x,2]
+    prior.k <- priors[y,1]
+    prior.l <- priors[y,2]
+    print(paste(prior.i,prior.j,prior.k,prior.l))
+
+    for (z in 1:dim(choosers)[1]) {
+      print(paste(choosers[z,][1], choosers[z,][2]))
+      add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
+    }
+  }
 }
-
 
 
 ```
