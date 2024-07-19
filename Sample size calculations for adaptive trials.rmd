@@ -395,12 +395,14 @@ priors <- rbind(
   c(100,1),
   c(1,100),
   c(3,1),
+  c(3,2),
+  c(6,4),
+  c(10,1),
+  c(10,10),
   c(420,300),
-  c(500,600),
+  c(600,500),
   c(1000,10),
-  c(1010,10),
-  c(10,1000),
-  c(10,1010)
+  c(1010,10)
 )
 
 choosers <- rbind(
@@ -415,17 +417,20 @@ choosers <- rbind(
   c("tw_foo",0.5)
 )
 
+
 for (x in 1:dim(priors)[1]) {
   for (y in 1:dim(priors)[1]) {
-    prior.i <- priors[x,1]
-    prior.j <- priors[x,2]
-    prior.k <- priors[y,1]
-    prior.l <- priors[y,2]
-    print(paste(prior.i,prior.j,prior.k,prior.l))
+    if (y >= x) {
+      prior.i <- priors[x,1]
+      prior.j <- priors[x,2]
+      prior.k <- priors[y,1]
+      prior.l <- priors[y,2]
+      print(paste(prior.i,prior.j,prior.k,prior.l))
 
-    for (z in 1:dim(choosers)[1]) {
-      print(paste(choosers[z,][1], choosers[z,][2]))
-      add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
+      for (z in 1:dim(choosers)[1]) {
+        print(paste(choosers[z,][1], choosers[z,][2]))
+        add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
+      }
     }
   }
 }
