@@ -193,7 +193,7 @@ ebm <- function( i, j, k, l, chooser_params ) {
 
 ```{r}
 
-one_run <- function(n, chooser, chooser_params, alpha) {
+one_run <- function(n, chooser, chooser_params) {
 
   i <- 0
   j <- 0
@@ -204,8 +204,8 @@ one_run <- function(n, chooser, chooser_params, alpha) {
   p.c <- rbeta( 1, prior.i, prior.j )
   p.n <- rbeta( 1, prior.k, prior.l )
 
-  correctly_reject_nulls <- c()
-  is_successes <- c()
+  is_treatment_c_best_list <- c()
+  is_treatment_c_found_best_by_study_list <- c()
 
   for (m in 1:n) {
 
@@ -243,54 +243,36 @@ one_run <- function(n, chooser, chooser_params, alpha) {
       }
     }
 
-    xtab <- as.table(rbind(c(i, j), c(k, l)))
-    dimnames(xtab) <- list(
-      group = c("grp1", "grp2"),
-      success = c("yes", "no")
-    )
-
-    null_rejected <- tryCatch(
-      {
-        test <- prop.test(xtab)
-        test["p.value"] < alpha
-      },
-      error=function(cond) {
-        FALSE
-      }
-    )
-    if (is.na(null_rejected)) {
-      null_rejected <- FALSE
-    }
-    # power is based on _correctly_ rejecting the null
-    # we must ignore rejections where the sign is wrong
+    # note that some ENS focused allocation algorithms occationally assign zero
+    # patients to a treatment. This breaks the basic expectation forumula.
+    # I am not sure how to default it.
     p.c_hat <- i/(i+j)
     p.n_hat <- k/(k+l)
-    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
-    correctly_reject_null <- null_rejected
-    if (null_rejected & incorrect_direction) {
-      correctly_reject_null <- FALSE
-    }
 
-    correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
-    is_successes <- append(is_successes, sample)
+    is_treatment_c_best <- p.c > p.n
+    is_treatment_c_found_best_by_study <- p.c_hat > p.n_hat
+
+    is_treatment_c_best_list <- append(is_treatment_c_best_list, is_treatment_c_best)
+    is_treatment_c_found_best_by_study_list <- append(is_treatment_c_found_best_by_study_list, is_treatment_c_found_best_by_study)
   }
 
-  return(rbind(correctly_reject_nulls,is_successes))
+  return(rbind(is_treatment_c_best_list, is_treatment_c_found_best_by_study_list))
 }
 
 
-simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params) {
 
   runs <- array(0, dim=c(2,numb_of_patients))
 
   for (iter in 1:(numb_of_sims)) {
 
-    run_results <- runner(numb_of_patients, chooser, chooser_params, alpha)
+    run_results <- runner(numb_of_patients, chooser, chooser_params)
     runs <- runs + (run_results - runs)/(iter+1)
   }
 
   return(runs)
 }
+
 
 ```
 
@@ -299,8 +281,8 @@ simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_p
 ```{r}
 
 # setup parameters
-numb_of_sims <- 500
-numb_of_patients <- 2**9
+numb_of_sims <- 50
+numb_of_patients <- 2**5
 
 prior.i <- 100
 prior.j <- 100
@@ -331,7 +313,7 @@ chooser = "DBCD"
 chooser_params = 2
 
 # simulate the clinical trials
-sim_output <- simulator(numb_of_sims, numb_of_patients, one_run, get(chooser), chooser_params, alpha)
+sim_output <- simulator(numb_of_sims, numb_of_patients, one_run, get(chooser), chooser_params)
 
 ```
 
@@ -359,9 +341,9 @@ dev.off()
 
 ```{r}
 
-add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params) {
   
-  sim_output <- simulator(numb_of_sims, numb_of_patients, runner, get(chooser), chooser_params, alpha)
+  sim_output <- simulator(numb_of_sims, numb_of_patients, runner, get(chooser), chooser_params)
 
   orders_of_magitude <- floor(log(numb_of_patients,2))
 
@@ -380,7 +362,7 @@ add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_
       "power" = sim_output[1,][sample_size],
       "ENS" = mean(sim_output[2,1:sample_size])
     )
-    write.table(df, "power and ENS for adaptive trials.csv", append=TRUE, sep=",", col.names = FALSE, row.names = FALSE)
+    write.table(df, "P(A is better than B) vs P(A seems better than B).csv", append=TRUE, sep=",", col.names = FALSE, row.names = FALSE)
   }
 }
 
@@ -391,29 +373,14 @@ add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_
 
 priors <- rbind(
   c(1,1),
-  c(100,100),
-  c(100,1),
-  c(1,100),
-  c(3,1),
-  c(3,2),
-  c(6,4),
-  c(10,1),
   c(10,10),
-  c(420,300),
-  c(600,500),
-  c(1000,10),
-  c(1010,10)
+  c(100,100)
 )
 
 choosers <- rbind(
   c("balanced","NA"),
-  c("thomper","NA"),
-  c("DTL",0),
   c("DTL",2),
-  c("DTL",6),
-  c("DBCD",0),
   c("DBCD",2),
-  c("DBCD",4),
   c("tw_foo",0.5)
 )
 
@@ -429,7 +396,7 @@ for (x in 1:dim(priors)[1]) {
 
       for (z in 1:dim(choosers)[1]) {
         print(paste(choosers[z,][1], choosers[z,][2]))
-        add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
+        add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]))
       }
     }
   }
@@ -438,38 +405,4 @@ for (x in 1:dim(priors)[1]) {
 
 ```
 
-
-
-
-```{r}
-
-# pull in data
-df <- read.csv("power and ENS for adaptive trials.csv")
-
-# filter data frame
-df <- df[df$sample.size == 2**9,]
-df <- df[df$prior.i == 100,]
-df <- df[df$prior.j == 1,]
-df <- df[df$prior.k == 3,]
-df <- df[df$prior.l == 1,]
-
-# group by allocation method and average across different sims of the same thing
-df <- aggregate(df[,10:11], list(paste(df$chooser, df$chooser_params)), mean)
-
-# plot results on a scatter plot
-plot(df$power,df$ENS, xlim=c(0,1),ylim=c(0,1), main="Pareto frontier", sub="Expected Power vs Expected Benifit", xlab="Expected Power", ylab="Expected Proportion of Successes")
-
-# find points on the Pareto frontier
-df <- df[order(df$power, decreasing=TRUE),]
-df <- df[ which(df$ENS == cummax(df$ENS)) , ]
-lines(df$power, df$ENS)
-
-# label all points
-#text(df$power,df$ENS-0.01, labels=df$Group.1)
-
-# label points on the Pareto frontier
-text(df$power+0.012,df$ENS+0.012, labels=df$Group.1)
-
-
-```
 
