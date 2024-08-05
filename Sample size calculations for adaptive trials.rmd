@@ -53,7 +53,7 @@ foo <- function(i,j,k,l) {
 }
 
 
-tw_foo <- function( i, j, k, l, chooser_params ) {
+tw <- function( i, j, k, l, chooser_params ) {
 
     c <- chooser_params
 
@@ -390,42 +390,42 @@ add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_
 ```{r}
 
 priors <- rbind(
-  c(1,1),
-  c(100,100),
-  c(100,1),
-  c(1,100),
-  c(3,1),
-  c(3,2),
-  c(6,4),
-  c(10,1),
-  c(10,10),
-  c(420,300),
-  c(600,500),
-  c(1000,10),
-  c(1010,10)
+  c(1,1)#,
+  # c(100,100),
+  # c(100,1),
+  # c(1,100),
+  # c(3,1),
+  # c(3,2),
+  # c(6,4),
+  # c(10,1),
+  # c(10,10),
+  # c(420,300),
+  # c(600,500),
+  # c(1000,10),
+  # c(1010,10)
 )
-
-# choosers <- rbind(
-#   c("balanced","NA"),
-#   c("thomper","NA"),
-#   c("DTL",0),
-#   c("DTL",2),
-#   c("DTL",6),
-#   c("DBCD",0),
-#   c("DBCD",2),
-#   c("DBCD",4),
-#   c("tw_foo",0.5)
-# )
-
 
 choosers <- rbind(
-  c("tw_foo",1/3),
-  c("tw_foo",2/3),
-  c("tw_foo",1/5),
-  c("tw_foo",4/5),
-  c("tw_foo",1/9),
-  c("tw_foo",8/9)
+  c("balanced","NA"),
+  c("thomper","NA"),
+  c("DTL",0),
+  c("DTL",2),
+  c("DTL",6),
+  c("DBCD",0),
+  c("DBCD",2),
+  c("DBCD",4),
+  c("tw",0.5)
 )
+
+
+# choosers <- rbind(
+#   c("tw",1/3),
+#   c("tw",2/3),
+#   c("tw",1/5),
+#   c("tw",4/5),
+#   c("tw",1/9),
+#   c("tw",8/9)
+# )
 
 
 for (x in 1:dim(priors)[1]) {
@@ -439,7 +439,7 @@ for (x in 1:dim(priors)[1]) {
 
       for (z in 1:dim(choosers)[1]) {
         print(paste(choosers[z,][1], choosers[z,][2]))
-        add_to_csv(100, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
+        add_to_csv(1000, 2**9, one_run, choosers[z,][1], as.numeric(choosers[z,][2]), alpha)
       }
     }
   }
@@ -456,26 +456,31 @@ for (x in 1:dim(priors)[1]) {
 # pull in data
 df <- read.csv("power and ENS for adaptive trials.csv")
 
+# force type conversion
+df$power <- as.numeric(df$power)
+df$ENS <- as.numeric(df$ENS)
+
 # filter data frame
 df <- df[df$sample.size == 2**9,]
-df <- df[df$prior.i == 100,]
+df <- df[df$number.of.sims == 1000,]
+df <- df[df$prior.i == 1,]
 df <- df[df$prior.j == 1,]
-df <- df[df$prior.k == 3,]
+df <- df[df$prior.k == 1,]
 df <- df[df$prior.l == 1,]
 
 # group by allocation method and average across different sims of the same thing
-df <- aggregate(df[,10:11], list(paste(df$chooser, df$chooser_params)), mean)
+df <- aggregate(df[,10:11], by=list(paste(df$chooser, df$chooser_params)), FUN=mean)
 
 # plot results on a scatter plot
 plot(df$power,df$ENS, xlim=c(0,1),ylim=c(0,1), main="Pareto frontier", sub="Expected Power vs Expected Benifit", xlab="Expected Power", ylab="Expected Proportion of Successes")
+
+# label all points
+#text(df$power,df$ENS-0.01, labels=df$Group.1)
 
 # find points on the Pareto frontier
 df <- df[order(df$power, decreasing=TRUE),]
 df <- df[ which(df$ENS == cummax(df$ENS)) , ]
 lines(df$power, df$ENS)
-
-# label all points
-#text(df$power,df$ENS-0.01, labels=df$Group.1)
 
 # label points on the Pareto frontier
 text(df$power+0.012,df$ENS+0.012, labels=df$Group.1)

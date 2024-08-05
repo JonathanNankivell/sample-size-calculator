@@ -360,7 +360,7 @@ add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_
       "prior.k" = prior.k,
       "prior.l" = prior.l,
       "power" = sim_output[1,][sample_size],
-      "ENS" = mean(sim_output[2,1:sample_size])
+      "ENS" = mean(sim_output[2,1:sample_size], na.rm=TRUE)
     )
     write.table(df, "P(A is better than B) vs P(A seems better than B).csv", append=TRUE, sep=",", col.names = FALSE, row.names = FALSE)
   }
