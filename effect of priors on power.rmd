@@ -230,9 +230,100 @@ narrow_and_distinct_priors <- data[data["prior.i"] == 100
 
 head(narrow_and_distinct_priors)
 
-ordered_data <- data[order(data$power), ]
 
-head(ordered_data, 20)
-tail(ordered_data, 20)
 
+```
+
+
+
+
+```{r}
+
+# Setup figure parameters
+
+# Choose where to save the plots of priors
+png("plot of priors.png",
+    units = "in", width = 5, height = 8, res = 300)
+
+# 3 row and 1 columns
+par(mfrow = c(3, 1))
+
+
+# First plot
+# Typical priors
+
+# setup parameters
+prior.i <- 100
+prior.j <- 100
+prior.k <- 3
+prior.l <- 1
+
+
+# plot beta distributions
+x1 <- seq(0, 1, length = 1000)
+y1 <- dbeta(x1, prior.i, prior.j)
+plot(x1, y1,
+     type = "l", col = "red", main = "Typical Priors",
+     ylab = "Probability density", xlab = "Actual Proportion")
+
+x2 <- seq(0, 1, length = 1000)
+y2 <- dbeta(x1, prior.k, prior.l)
+lines(x2, y2, col = "blue")
+legend(x = "topright",
+       legend = c(paste0("Beta(", prior.i, ",", prior.j, ")"),
+                  paste0("Beta(", prior.k, ",", prior.l, ")")),
+       lty = 1, col = c("red", "blue"))
+
+
+# Second plot
+# Narrow and similar priors
+
+# setup parameters
+prior.i <- 1000
+prior.j <- 10
+prior.k <- 1010
+prior.l <- 10
+
+
+# plot beta distributions
+x1 <- seq(0, 1, length = 1000)
+y1 <- dbeta(x1, prior.i, prior.j)
+plot(x1, y1,
+     type = "l", col = "red", main = "Narrow and Similar Priors",
+     ylab = "Probability density", xlab = "Actual Proportion")
+
+x2 <- seq(0, 1, length = 1000)
+y2 <- dbeta(x1, prior.k, prior.l)
+lines(x2, y2, col = "blue")
+legend(x = "topright",
+       legend = c(paste0("Beta(", prior.i, ",", prior.j, ")"),
+                  paste0("Beta(", prior.k, ",", prior.l, ")")),
+       lty = 1, col = c("red", "blue"))
+
+# Third plot
+# Narrow and distinct priors
+
+# setup parameters
+prior.i <- 100
+prior.j <- 100
+prior.k <- 1000
+prior.l <- 10
+
+
+# plot beta distributions
+x1 <- seq(0, 1, length = 1000)
+y1 <- dbeta(x1, prior.i, prior.j)
+plot(x1, y1,
+     type = "l", col = "red", main = "Narrow and Distinct Priors",
+     ylab = "Probability density", xlab = "Actual Proportion")
+
+x2 <- seq(0, 1, length = 1000)
+y2 <- dbeta(x1, prior.k, prior.l)
+lines(x2, y2, col = "blue")
+legend(x = "topright",
+       legend = c(paste0("Beta(", prior.i, ",", prior.j, ")"),
+                  paste0("Beta(", prior.k, ",", prior.l, ")")),
+       lty = 1, col = c("red", "blue"))
+
+dev.off()
 ```
