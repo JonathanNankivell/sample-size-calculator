@@ -1,0 +1,238 @@
+
+
+```{r}
+
+balanced <- function(i, j, k, l, chooser_params) {
+
+  n <- i + j + k + l
+
+  if (n %% 2) {
+    action <- sample(c(1, 2), size = 1)
+  } else {
+    if (i + j < k + l) {
+      action <- 1
+    } else {
+      action <- 2
+    }
+  }
+
+  return(action)
+}
+
+
+
+one_run <- function(n, chooser, chooser_params, alpha) {
+
+  i <- 0
+  j <- 0
+  k <- 0
+  l <- 0
+
+  # set the true probability of success
+  p.c <- rbeta(1, prior.i, prior.j)
+  p.n <- rbeta(1, prior.k, prior.l)
+
+  correctly_reject_nulls <- c()
+  is_successes <- c()
+
+  for (m in 1:n) {
+
+    # use the chooser function to pick an action
+    # in this case, it should return 1 or 2
+    action <- chooser(i, j, k, l, chooser_params)
+    if (length(action) != 1) {
+      chooser_params <- action[2]
+      action <- action[1]
+    }
+
+    if (action == 1) {
+
+      # decide whether or not the treatment is a success
+      sample <- rbinom(1, 1, p.c)
+
+      if (sample == 1) {
+        # success!
+        i <- i + 1
+      } else if (sample == 0) {
+        # failure
+        j <- j + 1
+      }
+    } else {
+      # decide whether or not the treatment is a success
+      sample <- rbinom(1, 1, p.n)
+
+      if (sample == 1) {
+        # success!
+        k <- k + 1
+      } else if (sample == 0) {
+        # failure
+        l <- l + 1
+      }
+    }
+
+    xtab <- as.table(rbind(c(i, j), c(k, l)))
+    dimnames(xtab) <- list(
+      group = c("grp1", "grp2"),
+      success = c("yes", "no")
+    )
+
+    null_rejected <- tryCatch(
+      {
+        test <- prop.test(xtab)
+        test["p.value"] < alpha
+      },
+      error=function(cond) {
+        FALSE
+      }
+    )
+    if (is.na(null_rejected)) {
+      null_rejected <- FALSE
+    }
+    # power is based on _correctly_ rejecting the null
+    # we must ignore rejections where the sign is wrong
+    p.c_hat <- i / (i + j)
+    p.n_hat <- k / (k + l)
+    incorrect_direction <- (p.c_hat > p.n_hat) != (p.c > p.n)
+    correctly_reject_null <- null_rejected
+    if (null_rejected && incorrect_direction) {
+      correctly_reject_null <- FALSE
+    }
+
+    correctly_reject_nulls <- append(correctly_reject_nulls, correctly_reject_null)
+    is_successes <- append(is_successes, sample)
+  }
+
+  return(rbind(correctly_reject_nulls, is_successes))
+}
+
+
+simulator <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+
+  runs <- array(0, dim = c(2, numb_of_patients))
+
+  for (iter in 1:(numb_of_sims)) {
+
+    run_results <- runner(numb_of_patients, chooser, chooser_params, alpha)
+    runs <- runs + (run_results - runs) / (iter + 1)
+  }
+
+  return(runs)
+}
+
+
+
+add_to_csv <- function(numb_of_sims, numb_of_patients, runner, chooser, chooser_params, alpha) {
+
+  sim_output <- simulator(numb_of_sims, numb_of_patients, runner, get(chooser), chooser_params, alpha)
+
+  orders_of_magitude <- floor(log(numb_of_patients, 2))
+
+  for (i in 1:orders_of_magitude) {
+    sample_size <- 2**i
+    df <- data.frame(
+      "timestamp" = Sys.Date(),
+      "number of sims" = numb_of_sims,
+      "sample size" = sample_size,
+      "chooser" = chooser,
+      "chooser_params" = chooser_params,
+      "prior.i" = prior.i,
+      "prior.j" = prior.j,
+      "prior.k" = prior.k,
+      "prior.l" = prior.l,
+      "power" = sim_output[1,][sample_size],
+      "ENS" = mean(sim_output[2,1:sample_size])
+    )
+    write.table(df, "power and ENS for adaptive trials.csv",
+                append = TRUE, sep = ",",
+                col.names = FALSE, row.names = FALSE)
+  }
+}
+```
+
+
+```{r}
+
+
+priors <- rbind(
+  c(1, 1),
+  c(100, 100),
+  c(3, 1),
+  c(1000, 10),
+  c(1010, 10)
+)
+
+choosers <- rbind(
+  c("balanced", "NA")
+)
+
+
+for (x in 1:dim(priors)[1]) {
+  for (y in 1:dim(priors)[1]) {
+    if (y >= x) {
+      prior.i <- priors[x, 1]
+      prior.j <- priors[x, 2]
+      prior.k <- priors[y, 1]
+      prior.l <- priors[y, 2]
+      print(paste(prior.i, prior.j, prior.k, prior.l))
+
+      for (z in 1:dim(choosers)[1]) {
+        print(paste(choosers[z, ][1], choosers[z, ][2]))
+        add_to_csv(10000, 2**8, one_run, choosers[z, ][1], as.numeric(choosers[z, ][2]), alpha)
+      }
+    }
+  }
+}
+
+
+```
+
+
+
+```{r}
+
+data <- read.csv("power and ENS for adaptive trials.csv")
+head(data)
+
+# filter out small sims
+data <- data[data["number.of.sims"] >= 100,]
+
+# filter to sample size == 2**8
+data <- data[data["sample.size"] == 2**8,]
+
+# filter to chooser == balanced
+data <- data[data["chooser"] == "balanced",]
+
+# filter to unifrom priors
+uniform_priors <- data[data["prior.i"] == 1
+            & data["prior.j"] == 1
+            & data["prior.k"] == 1
+            & data["prior.l"] == 1, ]
+
+# filter to typical priors
+typical_priors <- data[data["prior.i"] == 100
+            & data["prior.j"] == 100
+            & data["prior.k"] == 3
+            & data["prior.l"] == 1, ]
+
+head(typical_priors)
+
+narrow_and_similar_priors <- data[data["prior.i"] == 1000
+            & data["prior.j"] == 10
+            & data["prior.k"] == 1010
+            & data["prior.l"] == 10, ]
+
+head(narrow_and_similar_priors)
+
+narrow_and_distinct_priors <- data[data["prior.i"] == 100
+            & data["prior.j"] == 100
+            & data["prior.k"] == 1000
+            & data["prior.l"] == 10, ]
+
+head(narrow_and_distinct_priors)
+
+ordered_data <- data[order(data$power), ]
+
+head(ordered_data, 20)
+tail(ordered_data, 20)
+
+```
